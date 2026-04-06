@@ -1,0 +1,632 @@
+// ============================================================================
+// Juris Sistema - Schema Prisma
+// Sistema de gestao interna para escritorio de advocacia brasileiro
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  ADVOGADO
+  ASSISTENTE
+}
+
+enum ContactStatus {
+  NAO_CLASSIFICADO
+  POTENCIAL_CLIENTE
+  CLIENTE_ATIVO
+  ENCERRADO
+  PESSOAL_FAMILIA
+  PARCEIRO
+}
+
+enum PersonType {
+  FISICA
+  JURIDICA
+}
+
+enum MatterStatus {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+  ARQUIVADO
+}
+
+enum LegalArea {
+  CIVIL
+  TRABALHISTA
+  CRIMINAL
+  PREVIDENCIARIO
+  TRIBUTARIO
+  FAMILIA
+  CONSUMIDOR
+  ADMINISTRATIVO
+  OUTRO
+}
+
+enum ConversationChannel {
+  WHATSAPP
+  EMAIL
+  TELEFONE
+  PRESENCIAL
+  OUTRO
+}
+
+enum ConversationClassification {
+  CLIENTE
+  POTENCIAL_CLIENTE
+  PESSOAL
+  PARCEIRO
+  IGNORAR
+  NAO_CLASSIFICADO
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+  INTERNAL_NOTE
+}
+
+enum DocumentOrigin {
+  UPLOAD
+  LOCAL_PATH
+  GENERATED
+  IMPORTED
+}
+
+enum FeeType {
+  AVISTA
+  PARCELADO
+  MENSAL
+  EXITO
+  MISTO
+}
+
+enum InstallmentStatus {
+  PENDENTE
+  PAGO
+  PARCIAL
+  VENCIDO
+  CANCELADO
+}
+
+enum PaymentMethod {
+  PIX
+  TRANSFERENCIA
+  BOLETO
+  DINHEIRO
+  CARTAO
+  OUTRO
+}
+
+enum PublicationStatus {
+  NOVA
+  EM_ANALISE
+  PROCESSADA
+  ARQUIVADA
+}
+
+enum DeadlineStatus {
+  SUGERIDO
+  CONFIRMADO
+  CUMPRIDO
+  PERDIDO
+  CANCELADO
+}
+
+enum ProcedureType {
+  CPC
+  CLT
+  CPP
+  LEI_ESPECIAL
+  OUTRO
+}
+
+enum DayCountType {
+  UTEIS
+  CORRIDOS
+}
+
+enum TaskStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum TaskPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum AlertType {
+  PRAZO
+  FINANCEIRO
+  CONVERSA
+  DOCUMENTO
+  SISTEMA
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum TimelineEventType {
+  MENSAGEM
+  NOTA
+  DOCUMENTO
+  PUBLICACAO
+  TAREFA
+  PRAZO
+  PAGAMENTO
+  STATUS_CHANGE
+  AUDIT
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+model User {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               UserRole
+  oabNumber          String?
+  phone              String?
+  active             Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  auditLogs             AuditLog[]
+  personsResponsible    Person[]        @relation("PersonResponsible")
+  personsCreated        Person[]        @relation("PersonCreatedBy")
+  mattersResponsible    Matter[]        @relation("MatterResponsible")
+  mattersCreated        Matter[]        @relation("MatterCreatedBy")
+  conversationsAssigned Conversation[]  @relation("ConversationAssignedTo")
+  documentsCreated      Document[]      @relation("DocumentCreatedBy")
+  feeAgreementsCreated  FeeAgreement[]  @relation("FeeAgreementCreatedBy")
+  paymentsCreated       Payment[]       @relation("PaymentCreatedBy")
+  publicationsProcessed Publication[]   @relation("PublicationProcessedBy")
+  deadlinesConfirmed    Deadline[]      @relation("DeadlineConfirmedBy")
+  tasksAssigned         Task[]          @relation("TaskAssignedTo")
+  tasksCreated          Task[]          @relation("TaskCreatedBy")
+  alerts                Alert[]
+  timelineEvents        TimelineEvent[] @relation("TimelineCreatedBy")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Person {
+  id            String        @id @default(uuid())
+  type          PersonType
+  name          String
+  cpfCnpj       String?       @unique
+  rg            String?
+  email         String?
+  phone         String?
+  whatsapp      String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  notes         String?       @db.Text
+  origin        String?
+  status        ContactStatus @default(NAO_CLASSIFICADO)
+  responsibleId String?
+  tags          String[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  createdById   String
+
+  // Relations
+  responsible    User?           @relation("PersonResponsible", fields: [responsibleId], references: [id])
+  createdBy      User            @relation("PersonCreatedBy", fields: [createdById], references: [id])
+  matters        Matter[]
+  conversations  Conversation[]
+  documents      Document[]
+  feeAgreements  FeeAgreement[]
+  publications   Publication[]
+  deadlines      Deadline[]
+  tasks          Task[]
+  timelineEvents TimelineEvent[]
+
+  @@index([cpfCnpj])
+  @@index([phone])
+  @@index([whatsapp])
+  @@index([status])
+  @@index([name])
+}
+
+model Matter {
+  id             String       @id @default(uuid())
+  title          String
+  description    String?      @db.Text
+  personId       String
+  status         MatterStatus @default(ATIVO)
+  legalArea      LegalArea
+  courtNumber    String?
+  court          String?
+  jurisdiction   String?
+  nextSteps      String?      @db.Text
+  responsibleId  String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  createdById    String
+
+  // Relations
+  person         Person          @relation(fields: [personId], references: [id])
+  responsible    User            @relation("MatterResponsible", fields: [responsibleId], references: [id])
+  createdBy      User            @relation("MatterCreatedBy", fields: [createdById], references: [id])
+  conversations  Conversation[]
+  documents      Document[]
+  feeAgreements  FeeAgreement[]
+  publications   Publication[]
+  deadlines      Deadline[]
+  tasks          Task[]
+  timelineEvents TimelineEvent[]
+
+  @@index([personId])
+  @@index([status])
+  @@index([courtNumber])
+}
+
+model Conversation {
+  id             String                     @id @default(uuid())
+  personId       String?
+  matterId       String?
+  channel        ConversationChannel
+  classification ConversationClassification @default(NAO_CLASSIFICADO)
+  externalId     String?
+  contactName    String?
+  contactPhone   String?
+  subject        String?
+  isArchived     Boolean                    @default(false)
+  lastMessageAt  DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  assignedToId   String?
+
+  // Relations
+  person     Person?             @relation(fields: [personId], references: [id])
+  matter     Matter?             @relation(fields: [matterId], references: [id])
+  assignedTo User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
+  messages   Message[]
+  alerts     ConversationAlert[]
+
+  @@index([personId])
+  @@index([classification])
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id             String           @id @default(uuid())
+  conversationId String
+  direction      MessageDirection
+  content        String           @db.Text
+  senderName     String?
+  senderPhone    String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  Attachment[]
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id          String   @id @default(uuid())
+  messageId   String?
+  fileName    String
+  fileType    String?
+  fileSize    Int?
+  storagePath String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model ConversationAlert {
+  id             String   @id @default(uuid())
+  conversationId String
+  type           String
+  message        String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id          String         @id @default(uuid())
+  name        String
+  description String?        @db.Text
+  personId    String?
+  matterId    String?
+  origin      DocumentOrigin
+  storagePath String
+  localPath   String?
+  fileType    String?
+  fileSize    Int?
+  fileHash    String?
+  version     Int            @default(1)
+  tags        String[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  createdById String
+
+  // Relations
+  person        Person?        @relation(fields: [personId], references: [id])
+  matter        Matter?        @relation(fields: [matterId], references: [id])
+  createdBy     User           @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  feeAgreements FeeAgreement[] @relation("ContractDocument")
+
+  @@index([personId])
+  @@index([matterId])
+  @@index([name])
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     String   @db.Text
+  category    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FeeAgreement {
+  id                 String   @id @default(uuid())
+  personId           String
+  matterId           String?
+  type               FeeType
+  totalAmount        Decimal  @db.Decimal(12, 2)
+  downPayment        Decimal  @default(0) @db.Decimal(12, 2)
+  installmentCount   Int      @default(1)
+  notes              String?  @db.Text
+  contractDocumentId String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  createdById        String
+
+  // Relations
+  person           Person       @relation(fields: [personId], references: [id])
+  matter           Matter?      @relation(fields: [matterId], references: [id])
+  contractDocument Document?    @relation("ContractDocument", fields: [contractDocumentId], references: [id])
+  createdBy        User         @relation("FeeAgreementCreatedBy", fields: [createdById], references: [id])
+  installments     Installment[]
+}
+
+model Installment {
+  id             String            @id @default(uuid())
+  feeAgreementId String
+  number         Int
+  amount         Decimal           @db.Decimal(12, 2)
+  dueDate        DateTime
+  status         InstallmentStatus @default(PENDENTE)
+  paidAmount     Decimal           @default(0) @db.Decimal(12, 2)
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  // Relations
+  feeAgreement FeeAgreement @relation(fields: [feeAgreementId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+
+  @@index([dueDate])
+  @@index([status])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  installmentId String
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  reference     String?
+  notes         String?
+  receiptPath   String?
+  paidAt        DateTime
+  createdAt     DateTime      @default(now())
+  createdById   String
+
+  // Relations
+  installment Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+}
+
+model Publication {
+  id                String            @id @default(uuid())
+  matterId          String?
+  personId          String?
+  status            PublicationStatus @default(NOVA)
+  source            String?
+  rawContent        String            @db.Text
+  processNumber     String?
+  court             String?
+  organ             String?
+  parties           String?           @db.Text
+  lawyers           String[]
+  actType           String?
+  relevantText      String?           @db.Text
+  mentionedDeadline String?
+  keywords          String[]
+  procedureType     ProcedureType?
+  publishedAt       DateTime?
+  importedAt        DateTime          @default(now())
+  processedAt       DateTime?
+  processedById     String?
+  createdAt         DateTime          @default(now())
+
+  // Relations
+  matter      Matter?    @relation(fields: [matterId], references: [id])
+  person      Person?    @relation(fields: [personId], references: [id])
+  processedBy User?      @relation("PublicationProcessedBy", fields: [processedById], references: [id])
+  deadlines   Deadline[]
+
+  @@index([status])
+  @@index([processNumber])
+  @@index([publishedAt])
+}
+
+model Deadline {
+  id               String        @id @default(uuid())
+  publicationId    String?
+  matterId         String?
+  personId         String?
+  description      String        @db.Text
+  procedureType    ProcedureType
+  dayCountType     DayCountType
+  dayCount         Int
+  startDate        DateTime
+  suggestedEndDate DateTime
+  confirmedEndDate DateTime?
+  status           DeadlineStatus @default(SUGERIDO)
+  legalBasis       String?
+  calculationNotes String?       @db.Text
+  confirmedById    String?
+  confirmedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  publication Publication? @relation(fields: [publicationId], references: [id])
+  matter      Matter?      @relation(fields: [matterId], references: [id])
+  person      Person?      @relation(fields: [personId], references: [id])
+  confirmedBy User?        @relation("DeadlineConfirmedBy", fields: [confirmedById], references: [id])
+  tasks       Task[]
+
+  @@index([status])
+  @@index([suggestedEndDate])
+  @@index([confirmedEndDate])
+}
+
+model ForensicCalendar {
+  id          String   @id @default(uuid())
+  date        DateTime @unique
+  description String
+  type        String   // FERIADO_NACIONAL, FERIADO_ESTADUAL, FERIADO_MUNICIPAL, SUSPENSAO, INDISPONIBILIDADE
+  state       String?
+  city        String?
+  court       String?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+}
+
+model Task {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?      @db.Text
+  matterId     String?
+  personId     String?
+  deadlineId   String?
+  assignedToId String?
+  priority     TaskPriority @default(MEDIA)
+  status       TaskStatus   @default(PENDENTE)
+  dueDate      DateTime?
+  completedAt  DateTime?
+  checklist    Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  createdById  String
+
+  // Relations
+  matter     Matter?   @relation(fields: [matterId], references: [id])
+  person     Person?   @relation(fields: [personId], references: [id])
+  deadline   Deadline? @relation(fields: [deadlineId], references: [id])
+  assignedTo User?     @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  createdBy  User      @relation("TaskCreatedBy", fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([assignedToId])
+}
+
+model Alert {
+  id         String        @id @default(uuid())
+  type       AlertType
+  severity   AlertSeverity @default(INFO)
+  title      String
+  message    String        @db.Text
+  entityType String?
+  entityId   String?
+  userId     String?
+  isRead     Boolean       @default(false)
+  readAt     DateTime?
+  createdAt  DateTime      @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+}
+
+model TimelineEvent {
+  id          String            @id @default(uuid())
+  personId    String?
+  matterId    String?
+  type        TimelineEventType
+  title       String
+  description String?           @db.Text
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+  createdById String?
+
+  // Relations
+  person    Person? @relation(fields: [personId], references: [id])
+  matter    Matter? @relation(fields: [matterId], references: [id])
+  createdBy User?   @relation("TimelineCreatedBy", fields: [createdById], references: [id])
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedAt   DateTime @updatedAt
+}
