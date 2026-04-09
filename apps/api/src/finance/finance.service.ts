@@ -19,7 +19,9 @@ export class FinanceService {
     page?: number;
     limit?: number;
   }) {
-    const { personId, matterId, isActive, page = 1, limit = 20 } = params;
+    const { personId, matterId, isActive } = params;
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.FeeAgreementWhereInput = {};
@@ -140,7 +142,9 @@ export class FinanceService {
     page?: number;
     limit?: number;
   }) {
-    const { overdue, page = 1, limit = 20 } = params;
+    const { overdue } = params;
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 20;
     const skip = (page - 1) * limit;
     const now = new Date();
 

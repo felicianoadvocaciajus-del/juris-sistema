@@ -14,7 +14,9 @@ export class TasksService {
     page?: number;
     limit?: number;
   }) {
-    const { status, priority, assignedToId, matterId, page = 1, limit = 20 } = params;
+    const { status, priority, assignedToId, matterId } = params;
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TaskWhereInput = {};

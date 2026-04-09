@@ -17,7 +17,9 @@ export class DocumentsService {
     page?: number;
     limit?: number;
   }) {
-    const { search, personId, matterId, origin, page = 1, limit = 20 } = params;
+    const { search, personId, matterId, origin } = params;
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.DocumentWhereInput = {};

@@ -14,7 +14,9 @@ export class PersonsService {
     page?: number;
     limit?: number;
   }) {
-    const { search, status, page = 1, limit = 20 } = params;
+    const { search, status } = params;
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.PersonWhereInput = {};
