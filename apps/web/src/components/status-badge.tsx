@@ -4,9 +4,14 @@ import { cn } from "@/lib/utils";
 const statusConfig: Record<string, { label: string; className: string }> = {
   // Client statuses
   ATIVO: { label: "Ativo", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  CLIENTE_ATIVO: { label: "Ativo", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   POTENCIAL: { label: "Potencial", className: "bg-blue-100 text-blue-800 border-blue-200" },
+  POTENCIAL_CLIENTE: { label: "Potencial", className: "bg-blue-100 text-blue-800 border-blue-200" },
+  NAO_CLASSIFICADO: { label: "Não Classificado", className: "bg-slate-100 text-slate-500 border-slate-200" },
   ENCERRADO: { label: "Encerrado", className: "bg-slate-100 text-slate-600 border-slate-200" },
   INATIVO: { label: "Inativo", className: "bg-slate-100 text-slate-500 border-slate-200" },
+  PESSOAL_FAMILIA: { label: "Pessoal", className: "bg-purple-100 text-purple-800 border-purple-200" },
+  PARCEIRO: { label: "Parceiro", className: "bg-cyan-100 text-cyan-800 border-cyan-200" },
 
   // Case statuses
   EM_ANDAMENTO: { label: "Em Andamento", className: "bg-blue-100 text-blue-800 border-blue-200" },
@@ -27,6 +32,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   RESPONDIDA: { label: "Respondida", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
 
   // Deadline statuses
+  SUGERIDO: { label: "Sugerido", className: "bg-amber-100 text-amber-800 border-amber-200" },
   CONFIRMADO: { label: "Confirmado", className: "bg-blue-100 text-blue-800 border-blue-200" },
   CUMPRIDO: { label: "Cumprido", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   PERDIDO: { label: "Perdido", className: "bg-red-100 text-red-800 border-red-200" },

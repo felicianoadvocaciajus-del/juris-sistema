@@ -56,9 +56,9 @@ export default function CasoDetailPage() {
 
   useEffect(() => {
     api
-      .get(`/cases/${params.id}`)
+      .get(`/matters/${params.id}`)
       .then((res) => setCaseData(res.data))
-      .catch(() => router.push("/casos"))
+      .catch((err) => { console.error('Erro caso:', err); router.push("/casos"); })
       .finally(() => setLoading(false));
   }, [params.id, router]);
 

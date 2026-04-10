@@ -52,7 +52,7 @@ export class DeadlinesService {
           matter: { select: { id: true, title: true, courtNumber: true } },
           person: { select: { id: true, name: true } },
           confirmedBy: { select: { id: true, name: true } },
-          publication: { select: { id: true, actType: true } },
+          publication: { select: { id: true, actType: true, processNumber: true } },
           _count: { select: { tasks: true } },
         },
         orderBy: { suggestedEndDate: 'asc' },

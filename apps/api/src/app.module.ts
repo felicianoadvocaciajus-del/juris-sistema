@@ -17,6 +17,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AuditModule } from './audit/audit.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { WebhookModule } from './webhook/webhook.module';
+import { PrevidenciarioModule } from './previdenciario/previdenciario.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { WebhookModule } from './webhook/webhook.module';
     AuditModule,
     TimelineModule,
     WebhookModule,
+    PrevidenciarioModule,
   ],
 })
 export class AppModule {}

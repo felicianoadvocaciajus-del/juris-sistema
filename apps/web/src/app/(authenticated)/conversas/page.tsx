@@ -194,10 +194,23 @@ export default function ConversasPage() {
               <Button variant="outline" onClick={() => setImportOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={() => {
-                toast({ title: "Conversa importada (modo demo)" });
-                setImportOpen(false);
-                setImportText("");
+              <Button onClick={async () => {
+                try {
+                  await api.post("/conversations", {
+                    contactName: "Importado",
+                    contactPhone: "",
+                    subject: importText.substring(0, 100),
+                    channel: "OUTRO",
+                  });
+                  toast({ title: "Conversa criada!" });
+                  setImportOpen(false);
+                  setImportText("");
+                  // Recarregar
+                  const res = await getConversations();
+                  setConversations((res as any).data || res || []);
+                } catch {
+                  toast({ title: "Erro ao criar conversa", variant: "destructive" });
+                }
               }}>
                 Importar
               </Button>
@@ -339,7 +352,7 @@ export default function ConversasPage() {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         if (newMessage.trim()) {
-                          toast({ title: "Nota adicionada (modo demo)" });
+                          api.post(`/conversations/${selectedConv?.id}/messages`, { content: newMessage, direction: 'INTERNAL_NOTE', senderName: 'Administrador' }).then(() => toast({ title: "Nota adicionada!" })).catch(() => toast({ title: "Erro", variant: "destructive" }));
                           setNewMessage("");
                         }
                       }
@@ -348,7 +361,7 @@ export default function ConversasPage() {
                   <Button
                     onClick={() => {
                       if (newMessage.trim()) {
-                        toast({ title: "Nota adicionada (modo demo)" });
+                        api.post(`/conversations/${selectedConv?.id}/messages`, { content: newMessage, direction: 'INTERNAL_NOTE', senderName: 'Administrador' }).then(() => toast({ title: "Nota adicionada!" })).catch(() => toast({ title: "Erro", variant: "destructive" }));
                         setNewMessage("");
                       }
                     }}

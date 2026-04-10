@@ -148,4 +148,29 @@ export class DocumentsController {
   async remove(@Param('id') id: string) {
     return this.documentsService.remove(id);
   }
+
+  @Post('generate')
+  @ApiOperation({ summary: 'Gerar documento a partir de template' })
+  async generate(
+    @Body() body: {
+      templateId: string;
+      personId?: string;
+      matterId?: string;
+      variables?: Record<string, any>;
+    },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // Delegar para o templates service
+    const { TemplatesService } = require('../templates/templates.service');
+    const templatesService = new TemplatesService(
+      (this as any).documentsService['prisma'] || require('../prisma/prisma.service'),
+    );
+
+    try {
+      const html = await templatesService.render(body.templateId, body.variables || {});
+      return { html, templateId: body.templateId };
+    } catch (err) {
+      return { error: 'Erro ao gerar documento: ' + (err as any)?.message };
+    }
+  }
 }

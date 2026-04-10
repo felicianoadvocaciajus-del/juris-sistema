@@ -7,11 +7,17 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { PublicationsService } from './publications.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 @ApiTags('Publications')
 @ApiBearerAuth()
@@ -49,12 +55,44 @@ export class PublicationsController {
     return this.publicationsService.findById(id);
   }
 
+  @Post('extract-pdf')
+  @ApiOperation({ summary: 'Extrair texto de PDF para publicacao' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async extractPdf(@UploadedFile() file: any) {
+    if (!file) {
+      return { text: '' };
+    }
+
+    try {
+      // Extrair texto do PDF usando pdfjs-dist
+      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+      const data = new Uint8Array(file.buffer);
+      const doc = await pdfjsLib.getDocument({ data }).promise;
+      let text = '';
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map((item: any) => item.str).join(' ') + '\n';
+      }
+
+      if (text.trim().length > 10) {
+        return { text: text.substring(0, 100000) };
+      }
+
+      return { text: '', error: 'PDF sem texto extraivel. Cole o texto manualmente.' };
+    } catch (err) {
+      return { text: '', error: 'Erro ao ler PDF: ' + (err?.message || 'desconhecido') };
+    }
+  }
+
   @Post('import')
   @ApiOperation({ summary: 'Importar publicacao' })
   async import(
     @Body()
     body: {
-      rawContent: string;
+      rawContent?: string;
+      text?: string;
       source?: string;
       processNumber?: string;
       court?: string;
@@ -70,7 +108,12 @@ export class PublicationsController {
       personId?: string;
     },
   ) {
-    return this.publicationsService.import(body);
+    // Aceitar tanto rawContent quanto text
+    const importData = {
+      ...body,
+      rawContent: body.rawContent || body.text || '',
+    };
+    return this.publicationsService.import(importData as any);
   }
 
   @Patch(':id/process')

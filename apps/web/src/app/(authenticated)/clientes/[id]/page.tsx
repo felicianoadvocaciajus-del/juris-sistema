@@ -34,7 +34,9 @@ import {
   Phone,
   MapPin,
   User,
+  Shield,
 } from "lucide-react";
+import { PrevidenciarioTab } from "@/components/previdenciario/previdenciario-tab";
 
 interface ClientDetail {
   id: string;
@@ -56,10 +58,14 @@ interface ClientDetail {
   tags?: string[];
   notes?: string;
   cases?: any[];
+  matters?: any[];
   documents?: any[];
   conversations?: any[];
   timeline?: any[];
   installments?: any[];
+  feeAgreements?: any[];
+  tasks?: any[];
+  _count?: any;
   createdAt: string;
 }
 
@@ -71,9 +77,9 @@ export default function ClienteDetailPage() {
 
   useEffect(() => {
     api
-      .get(`/clients/${params.id}`)
+      .get(`/persons/${params.id}`)
       .then((res) => setClient(res.data))
-      .catch(() => router.push("/clientes"))
+      .catch((err) => { console.error('Erro ao carregar cliente:', err); router.push("/clientes"); })
       .finally(() => setLoading(false));
   }, [params.id, router]);
 
@@ -165,6 +171,10 @@ export default function ClienteDetailPage() {
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="conversas">Conversas</TabsTrigger>
+          <TabsTrigger value="previdenciario" className="text-blue-700">
+            <Shield className="mr-1 h-4 w-4" />
+            Previdenciario
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dados">
@@ -223,7 +233,7 @@ export default function ClienteDetailPage() {
         <TabsContent value="casos">
           <Card>
             <CardContent className="pt-6">
-              {client.cases && client.cases.length > 0 ? (
+              {(client.matters || client.cases)?.length > 0 ? (
                 <DataTable
                   columns={[
                     {
@@ -233,7 +243,8 @@ export default function ClienteDetailPage() {
                         <span className="font-medium">{c.title}</span>
                       ),
                     },
-                    { key: "area", header: "Area" },
+                    { key: "legalArea", header: "Area", render: (c: any) => c.legalArea || c.area || "-" },
+                    { key: "courtNumber", header: "Processo", render: (c: any) => c.courtNumber || "-" },
                     {
                       key: "status",
                       header: "Status",
@@ -242,7 +253,7 @@ export default function ClienteDetailPage() {
                       ),
                     },
                   ]}
-                  data={client.cases}
+                  data={client.matters || client.cases || []}
                   keyExtractor={(c: any) => c.id}
                   onRowClick={(c: any) => router.push(`/casos/${c.id}`)}
                 />
@@ -277,13 +288,18 @@ export default function ClienteDetailPage() {
                 <DataTable
                   columns={[
                     {
-                      key: "title",
+                      key: "name",
                       header: "Documento",
                       render: (d: any) => (
-                        <span className="font-medium">{d.title}</span>
+                        <span className="font-medium">{d.name || d.title || "Sem nome"}</span>
                       ),
                     },
-                    { key: "type", header: "Tipo" },
+                    { key: "tags", header: "Tipo", render: (d: any) => (d.tags || []).join(", ") || d.type || "-" },
+                    {
+                      key: "fileSize",
+                      header: "Tamanho",
+                      render: (d: any) => d.fileSize ? `${(d.fileSize / 1024).toFixed(0)} KB` : "-",
+                    },
                     {
                       key: "createdAt",
                       header: "Data",
@@ -307,12 +323,17 @@ export default function ClienteDetailPage() {
         <TabsContent value="financeiro">
           <Card>
             <CardContent className="pt-6">
-              {client.installments && client.installments.length > 0 ? (
+              {(() => {
+                const installments = client.feeAgreements?.flatMap((fa: any) =>
+                  (fa.installments || []).map((inst: any) => ({ ...inst, type: fa.type }))
+                ) || client.installments || [];
+                return installments.length > 0 ? (
                 <DataTable
                   columns={[
                     {
-                      key: "description",
-                      header: "Descricao",
+                      key: "type",
+                      header: "Tipo",
+                      render: (i: any) => i.type || i.description || "-",
                     },
                     {
                       key: "amount",
@@ -331,8 +352,13 @@ export default function ClienteDetailPage() {
                         <StatusBadge status={i.status} />
                       ),
                     },
+                    {
+                      key: "paidAmount",
+                      header: "Pago",
+                      render: (i: any) => i.paidAmount ? formatCurrency(i.paidAmount) : "-",
+                    },
                   ]}
-                  data={client.installments}
+                  data={installments}
                   keyExtractor={(i: any) => i.id}
                 />
               ) : (
@@ -340,7 +366,8 @@ export default function ClienteDetailPage() {
                   title="Nenhum registro financeiro"
                   description="Nenhuma parcela ou pagamento registrado."
                 />
-              )}
+              );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -383,6 +410,14 @@ export default function ClienteDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="previdenciario">
+          <PrevidenciarioTab
+            personId={client.id}
+            personName={client.name}
+            personCpf={client.cpfCnpj}
+          />
         </TabsContent>
       </Tabs>
     </div>

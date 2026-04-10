@@ -50,6 +50,9 @@ interface Publication {
   keywords?: string[];
   matter?: { title: string };
   person?: { name: string };
+  rawContent?: string;
+  mentionedDeadline?: string;
+  parties?: string;
   // Legacy fields
   content?: string;
   parsedInfo?: {
@@ -91,6 +94,9 @@ export default function PublicacoesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [selectedDeadline, setSelectedDeadline] = useState<string | null>(null);
+  const [deadlineNote, setDeadlineNote] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -111,27 +117,25 @@ export default function PublicacoesPage() {
         endOfWeek.setDate(now.getDate() + (7 - now.getDay()));
         const endOfWeekStr = endOfWeek.toISOString().split("T")[0];
 
+        const getDueDate = (d: any) => {
+          const raw = d.confirmedEndDate || d.suggestedEndDate || d.dueDate || "";
+          return String(raw).split("T")[0];
+        };
+
         if (tab === "prazos_hoje") {
-          setDeadlines(
-            allDeadlines.filter((d) => {
-              const due = (d.confirmedEndDate || d.suggestedEndDate || d.dueDate || "").split("T")[0];
-              return due === today;
-            })
-          );
+          setDeadlines(allDeadlines.filter((d) => getDueDate(d) === today));
         } else if (tab === "prazos_semana") {
-          setDeadlines(
-            allDeadlines.filter((d) => {
-              const due = (d.confirmedEndDate || d.suggestedEndDate || d.dueDate || "").split("T")[0];
-              return due >= today && due <= endOfWeekStr;
-            })
-          );
+          setDeadlines(allDeadlines.filter((d) => {
+            const due = getDueDate(d);
+            return due >= today && due <= endOfWeekStr;
+          }));
         } else if (tab === "vencidos") {
-          setDeadlines(
-            allDeadlines.filter((d) => {
-              const due = (d.confirmedEndDate || d.suggestedEndDate || d.dueDate || "").split("T")[0];
-              return due < today && d.status !== "CONFIRMADO";
-            })
-          );
+          setDeadlines(allDeadlines.filter((d) => {
+            const due = getDueDate(d);
+            return (due < today || d.status === "PERDIDO") && d.status !== "CUMPRIDO";
+          }));
+        } else if (tab === "cumpridos") {
+          setDeadlines(allDeadlines.filter((d) => d.status === "CUMPRIDO"));
         } else {
           setDeadlines(allDeadlines);
         }
@@ -149,17 +153,58 @@ export default function PublicacoesPage() {
   }, [fetchData]);
 
   const handleImport = async () => {
-    if (!importText.trim()) return;
+    if (!importText.trim() && !importFile) return;
     setImporting(true);
     try {
-      await api.post("/publications/import", { text: importText });
-      toast({ title: "Publicacao importada e processada!" });
+      let textToImport = importText;
+
+      // Se tem PDF, extrair texto primeiro
+      if (importFile) {
+        const formData = new FormData();
+        formData.append("file", importFile);
+        toast({ title: "Extraindo texto do PDF... pode demorar" });
+        const extractRes = await api.post("/publications/extract-pdf", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 120000,
+        });
+        textToImport = extractRes.data?.text || "";
+        if (extractRes.data?.error) {
+          toast({ title: extractRes.data.error, variant: "destructive" });
+          if (!textToImport && importText) textToImport = importText;
+        }
+      }
+
+      if (!textToImport.trim()) {
+        toast({ title: "Nenhum texto extraido. Cole o texto manualmente.", variant: "destructive" });
+        return;
+      }
+
+      // Dividir em publicações individuais se texto grande
+      const publicacoes = textToImport.split(/PUBLICAÇÃO:\s*\d+\s*de\s*\d+/i).filter((p: string) => p.trim().length > 50);
+
+      if (publicacoes.length > 1) {
+        toast({ title: `Importando ${publicacoes.length} publicacoes...` });
+        let ok = 0;
+        for (const pub of publicacoes) {
+          try {
+            await api.post("/publications/import", { rawContent: pub.trim().substring(0, 10000) });
+            ok++;
+          } catch {}
+        }
+        toast({ title: `${ok} de ${publicacoes.length} publicacoes importadas!` });
+      } else {
+        await api.post("/publications/import", { rawContent: textToImport.substring(0, 50000) });
+        toast({ title: "Publicacao importada!" });
+      }
+
       setImportOpen(false);
       setImportText("");
+      setImportFile(null);
       fetchData();
-    } catch {
+    } catch (err: any) {
       toast({
         title: "Erro ao importar publicacao",
+        description: err?.response?.data?.message || err?.message || "Tente novamente",
         variant: "destructive",
       });
     } finally {
@@ -169,17 +214,21 @@ export default function PublicacoesPage() {
 
   const confirmDeadline = async (deadlineId: string) => {
     try {
-      await api.patch(`/deadlines/${deadlineId}`, { status: "CONFIRMADO" });
+      // Buscar o prazo para pegar a data sugerida
+      const deadlineData = deadlines.find((d: any) => d.id === deadlineId);
+      const confirmedDate = deadlineData?.suggestedEndDate || deadlineData?.suggestedDate || new Date().toISOString();
+      await api.patch(`/deadlines/${deadlineId}/confirm`, { confirmedEndDate: confirmedDate });
       toast({ title: "Prazo confirmado!" });
       fetchData();
-    } catch {
-      toast({ title: "Erro ao confirmar prazo", variant: "destructive" });
+    } catch (err: any) {
+      console.error('Erro ao confirmar prazo:', err?.response?.data);
+      toast({ title: "Erro ao confirmar prazo", description: err?.response?.data?.message || "", variant: "destructive" });
     }
   };
 
   const markAsAnalyzed = async (pubId: string) => {
     try {
-      await api.patch(`/publications/${pubId}`, { status: "ANALISADA" });
+      await api.patch(`/publications/${pubId}/process`, { status: "PROCESSADA" });
       toast({ title: "Publicacao marcada como analisada!" });
       fetchData();
     } catch {
@@ -187,7 +236,34 @@ export default function PublicacoesPage() {
     }
   };
 
+  const markDeadlineCompleted = async (deadlineId: string) => {
+    try {
+      await api.patch(`/deadlines/${deadlineId}/complete`);
+      if (deadlineNote.trim()) {
+        await api.patch(`/deadlines/${deadlineId}`, { calculationNotes: deadlineNote });
+      }
+      toast({ title: "Prazo marcado como cumprido!" });
+      setSelectedDeadline(null);
+      setDeadlineNote("");
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Erro ao atualizar prazo", description: err?.response?.data?.message || "", variant: "destructive" });
+    }
+  };
+
+  const markDeadlineLost = async (deadlineId: string) => {
+    try {
+      await api.patch(`/deadlines/${deadlineId}/lost`);
+      toast({ title: "Prazo marcado como perdido" });
+      setSelectedDeadline(null);
+      fetchData();
+    } catch {
+      toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  };
+
   const isPublicationTab = tab === "novas" || tab === "em_analise";
+  const isDeadlineTab = !isPublicationTab;
 
   return (
     <div className="space-y-6">
@@ -213,17 +289,37 @@ export default function PublicacoesPage() {
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Texto da publicacao</Label>
+                <Label className="font-bold">Opcao 1: Upload de PDF</Label>
+                <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    className="text-sm"
+                  />
+                  {importFile && (
+                    <p className="mt-2 text-sm text-green-600 font-medium">
+                      Arquivo: {importFile.name} ({(importFile.size / 1024).toFixed(0)} KB)
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">ou</span></div>
+              </div>
+              <div className="space-y-2">
+                <Label>Opcao 2: Colar texto</Label>
                 <Textarea
-                  rows={10}
+                  rows={8}
                   value={importText}
                   onChange={(e) => setImportText(e.target.value)}
                   placeholder="Cole o texto da publicacao do diario oficial aqui..."
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                O sistema ira extrair automaticamente numero do processo,
-                partes, tribunal e prazos.
+                O sistema extrai automaticamente numero do processo, partes, tribunal e prazos.
+                PDFs de ate 50MB sao aceitos.
               </p>
             </div>
             <DialogFooter>
@@ -265,6 +361,10 @@ export default function PublicacoesPage() {
           <TabsTrigger value="vencidos">
             <AlertTriangle className="mr-1 h-4 w-4" />
             Vencidos
+          </TabsTrigger>
+          <TabsTrigger value="cumpridos">
+            <CheckCircle className="mr-1 h-4 w-4" />
+            Cumpridos
           </TabsTrigger>
         </TabsList>
 
@@ -335,9 +435,9 @@ export default function PublicacoesPage() {
                       </p>
                     )}
 
-                    {!pub.relevantText && pub.content && (
-                      <p className="text-xs text-muted-foreground line-clamp-3">
-                        {pub.content}
+                    {!pub.relevantText && (pub.content || pub.rawContent) && (
+                      <p className="text-xs text-muted-foreground line-clamp-4">
+                        {pub.content || pub.rawContent?.substring(0, 500)}
                       </p>
                     )}
 
@@ -345,6 +445,15 @@ export default function PublicacoesPage() {
                       <Badge variant="outline">
                         Caso: {pub.matter.title}
                       </Badge>
+                    )}
+
+                    {pub.mentionedDeadline && (
+                      <div className="bg-red-50 border border-red-200 rounded p-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                        <span className="text-sm font-bold text-red-700">
+                          PRAZO: {pub.mentionedDeadline}
+                        </span>
+                      </div>
                     )}
 
                     {pub.keywords && pub.keywords.length > 0 && (
@@ -387,9 +496,10 @@ export default function PublicacoesPage() {
               deadlines.map((deadline) => (
                 <Card
                   key={deadline.id}
-                  className={
+                  className={`cursor-pointer transition-all ${
                     tab === "vencidos" ? "border-red-200 bg-red-50/50" : ""
-                  }
+                  } ${selectedDeadline === deadline.id ? "ring-2 ring-blue-500" : "hover:shadow-md"}`}
+                  onClick={() => setSelectedDeadline(selectedDeadline === deadline.id ? null : deadline.id)}
                 >
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between">
@@ -400,17 +510,19 @@ export default function PublicacoesPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1 text-xs">
                             <Calendar className="h-3 w-3" />
-                            Vencimento:{" "}
-                            {formatDate(
-                              deadline.confirmedEndDate ||
-                                deadline.suggestedEndDate ||
-                                deadline.dueDate ||
-                                ""
-                            )}
+                            <span className="font-bold text-red-600">
+                              Vencimento:{" "}
+                              {formatDate(
+                                deadline.confirmedEndDate ||
+                                  deadline.suggestedEndDate ||
+                                  deadline.dueDate ||
+                                  ""
+                              )}
+                            </span>
                           </div>
-                          {deadline.suggestedEndDate && !deadline.confirmedEndDate && (
-                            <span className="text-xs text-muted-foreground">
-                              Sugerido: {formatDate(deadline.suggestedEndDate)}
+                          {deadline.dayCount && (
+                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                              {deadline.dayCount} dias {deadline.dayCountType === "UTEIS" ? "úteis" : "corridos"}
                             </span>
                           )}
                         </div>
@@ -429,20 +541,58 @@ export default function PublicacoesPage() {
                             Processo: {deadline.publication.processNumber}
                           </p>
                         )}
+                        {deadline.calculationNotes && (
+                          <p className="text-xs text-blue-600 italic mt-1">
+                            Obs: {deadline.calculationNotes}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={deadline.status} />
-                        {deadline.status === "SUGERIDO" && (
-                          <Button
-                            size="sm"
-                            onClick={() => confirmDeadline(deadline.id)}
-                          >
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Confirmar
-                          </Button>
-                        )}
                       </div>
                     </div>
+
+                    {/* Painel expandido ao clicar */}
+                    {selectedDeadline === deadline.id && (
+                      <div className="mt-4 pt-4 border-t space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div><span className="text-muted-foreground">Tipo:</span> {deadline.procedureType || "CPC"}</div>
+                          <div><span className="text-muted-foreground">Contagem:</span> {deadline.dayCountType === "UTEIS" ? "Dias úteis" : "Dias corridos"}</div>
+                          <div><span className="text-muted-foreground">Início:</span> {formatDate(deadline.startDate || "")}</div>
+                          <div><span className="text-muted-foreground">Prazo Fatal:</span> <span className="font-bold text-red-600">{formatDate(deadline.suggestedEndDate || "")}</span></div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Observações / O que foi feito:</label>
+                          <Textarea
+                            rows={2}
+                            value={deadlineNote}
+                            onChange={(e) => setDeadlineNote(e.target.value)}
+                            placeholder="Ex: Petição protocolada em 10/04/2026, protocolo nº 12345..."
+                            className="mt-1 text-sm"
+                          />
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap">
+                          {deadline.status !== "CUMPRIDO" && (
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => markDeadlineCompleted(deadline.id)}>
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Marcar Cumprido
+                            </Button>
+                          )}
+                          {deadline.status === "SUGERIDO" && (
+                            <Button size="sm" variant="outline" onClick={() => confirmDeadline(deadline.id)}>
+                              Confirmar Prazo
+                            </Button>
+                          )}
+                          {deadline.status !== "PERDIDO" && deadline.status !== "CUMPRIDO" && (
+                            <Button size="sm" variant="destructive" onClick={() => markDeadlineLost(deadline.id)}>
+                              Marcar Perdido
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))

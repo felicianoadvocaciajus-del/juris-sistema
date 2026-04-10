@@ -44,7 +44,7 @@ export default function DashboardPage() {
     },
     {
       title: "Prazos Vencendo",
-      value: data.upcomingDeadlines ?? data.prazosVencendo ?? 0,
+      value: Array.isArray(data.upcomingDeadlines) ? data.upcomingDeadlines.length : (data.upcomingDeadlines ?? data.prazosVencendo ?? 0),
       icon: Clock,
       color: "text-amber-600",
       bg: "bg-amber-50 border-amber-200",
@@ -109,10 +109,10 @@ export default function DashboardPage() {
 
   const timelineEvents = (data.recentTimeline || data.timeline || []).map(
     (e: any) => ({
-      id: e.id,
-      date: e.createdAt || e.date,
-      title: e.title,
-      description: e.description,
+      id: e.id || String(Math.random()),
+      date: e.createdAt || e.date || '',
+      title: typeof e.title === 'string' ? e.title : (e.description || ''),
+      description: typeof e.description === 'string' ? e.description : '',
       type:
         e.type === "PRAZO"
           ? "warning"

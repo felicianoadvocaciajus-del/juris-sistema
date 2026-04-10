@@ -96,7 +96,7 @@ export default function FinanceiroPage() {
   const registerPayment = async () => {
     if (!paymentDialog) return;
     try {
-      await api.patch(`/financial/installments/${paymentDialog.id}/pay`, {
+      await api.patch(`/finance/installments/${paymentDialog.id}/pay`, {
         paidAt: paymentDate || new Date().toISOString(),
       });
       toast({ title: "Pagamento registrado!" });

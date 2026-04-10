@@ -75,8 +75,64 @@ export class PersonsService {
             status: true,
             legalArea: true,
             courtNumber: true,
+            court: true,
+            description: true,
           },
           orderBy: { updatedAt: 'desc' },
+        },
+        documents: {
+          select: {
+            id: true,
+            name: true,
+            localPath: true,
+            storagePath: true,
+            fileSize: true,
+            tags: true,
+            origin: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        conversations: {
+          select: {
+            id: true,
+            contactName: true,
+            contactPhone: true,
+            subject: true,
+            lastMessageAt: true,
+            channel: true,
+            classification: true,
+          },
+          orderBy: { lastMessageAt: 'desc' },
+          take: 20,
+        },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+            dueDate: true,
+          },
+          orderBy: { dueDate: 'asc' },
+        },
+        feeAgreements: {
+          select: {
+            id: true,
+            type: true,
+            totalAmount: true,
+            installments: {
+              select: {
+                id: true,
+                amount: true,
+                dueDate: true,
+                status: true,
+                paidAmount: true,
+                paidAt: true,
+              },
+              orderBy: { dueDate: 'asc' },
+            },
+          },
         },
         _count: {
           select: {

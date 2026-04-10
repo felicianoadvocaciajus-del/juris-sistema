@@ -10,14 +10,28 @@ import {
   mockTemplates,
 } from './mock-data';
 
-// Tenta buscar da API. Se falhar, usa dados mock.
-// Remover os fallbacks quando o backend estiver rodando.
+// Busca da API. Só usa mock se API estiver completamente offline.
 async function fetchOrMock<T>(url: string, mockData: T): Promise<T> {
   try {
     const res = await api.get(url);
     return res.data;
-  } catch {
-    console.warn(`[Mock] API indisponivel para ${url}, usando dados de demonstracao`);
+  } catch (err: any) {
+    // Se for erro de auth (401/403), não usar mock — deixa o interceptor redirecionar
+    if (err?.response?.status === 401 || err?.response?.status === 403) {
+      throw err;
+    }
+    // Se o backend retornou resposta (4xx/5xx), não usar mock
+    if (err?.response) {
+      console.error(`[API] Erro ${err.response.status} para ${url}:`, err.response.data);
+      // Retorna array vazio em vez de mock para não confundir
+      if (Array.isArray(mockData)) return [] as unknown as T;
+      if (typeof mockData === 'object' && mockData !== null && 'data' in (mockData as any)) {
+        return { data: [], total: 0 } as unknown as T;
+      }
+      throw err;
+    }
+    // Só usa mock se API estiver completamente offline (network error)
+    console.warn(`[Mock] API offline para ${url}, usando dados de demonstracao`);
     return mockData;
   }
 }
@@ -27,7 +41,8 @@ export async function getDashboard() {
 }
 
 export async function getClients(params?: Record<string, string>) {
-  const query = params ? '?' + new URLSearchParams(params).toString() : '';
+  const allParams = { limit: '500', ...params };
+  const query = '?' + new URLSearchParams(allParams).toString();
   return fetchOrMock(`/persons${query}`, { data: mockClients, total: mockClients.length });
 }
 
@@ -60,7 +75,7 @@ export async function getPublications() {
 }
 
 export async function getDeadlines() {
-  return fetchOrMock('/deadlines', { data: mockDeadlines, total: mockDeadlines.length });
+  return fetchOrMock('/deadlines?limit=500', { data: mockDeadlines, total: mockDeadlines.length });
 }
 
 export async function getTemplates() {

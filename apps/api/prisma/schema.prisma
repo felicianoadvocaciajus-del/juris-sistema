@@ -211,6 +211,8 @@ model User {
   tasksCreated          Task[]          @relation("TaskCreatedBy")
   alerts                Alert[]
   timelineEvents        TimelineEvent[] @relation("TimelineCreatedBy")
+  cnisExtractsCreated   CnisExtract[]   @relation("CnisCreatedBy")
+  calcsCreated          PrevCalculation[] @relation("CalcCreatedBy")
 }
 
 model AuditLog {
@@ -264,6 +266,9 @@ model Person {
   deadlines      Deadline[]
   tasks          Task[]
   timelineEvents TimelineEvent[]
+  cnisExtracts       CnisExtract[]
+  prevCalculations   PrevCalculation[]
+  contributionDebts  ContributionDebt[]
 
   @@index([cpfCnpj])
   @@index([phone])
@@ -629,4 +634,87 @@ model SystemConfig {
   value       String   @db.Text
   description String?
   updatedAt   DateTime @updatedAt
+}
+
+// ============================================================================
+// MODULO PREVIDENCIARIO
+// ============================================================================
+
+model CnisExtract {
+  id            String   @id @default(uuid())
+  personId      String
+  cpf           String
+  nit           String?
+  birthDate     DateTime?
+  extractDate   DateTime
+  rawData       Json
+  vinculos      Json
+  competencias  Json
+  indicators    Json
+  totalTC       Json
+  carencia      Json
+  filePath      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+
+  person        Person   @relation(fields: [personId], references: [id])
+  createdBy     User?    @relation("CnisCreatedBy", fields: [createdById], references: [id])
+  calculations  PrevCalculation[]
+
+  @@index([personId])
+  @@index([cpf])
+}
+
+model PrevCalculation {
+  id              String    @id @default(uuid())
+  personId        String
+  cnisExtractId   String?
+  title           String
+  type            String
+  status          String    @default("RASCUNHO")
+  rules           Json
+  bestRule        String?
+  eligibilityDate DateTime?
+  estimatedRMI    Decimal?  @db.Decimal(12, 2)
+  tc              Json
+  carencia        Json
+  strategy        Json?
+  notes           String?   @db.Text
+  documentPath    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdById     String?
+
+  person          Person         @relation(fields: [personId], references: [id])
+  cnisExtract     CnisExtract?   @relation(fields: [cnisExtractId], references: [id])
+  createdBy       User?          @relation("CalcCreatedBy", fields: [createdById], references: [id])
+  contributions   ContributionDebt[]
+
+  @@index([personId])
+  @@index([status])
+}
+
+model ContributionDebt {
+  id              String    @id @default(uuid())
+  personId        String
+  calculationId   String?
+  competencia     String
+  tipo            String
+  valorOriginal   Decimal?  @db.Decimal(12, 2)
+  valorAtualizado Decimal?  @db.Decimal(12, 2)
+  salarioMinimo   Decimal?  @db.Decimal(12, 2)
+  aliquota        Decimal?  @db.Decimal(5, 2)
+  status          String    @default("PENDENTE")
+  gpsNumero       String?
+  dataPagamento   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  person          Person           @relation(fields: [personId], references: [id])
+  calculation     PrevCalculation? @relation(fields: [calculationId], references: [id])
+
+  @@index([personId])
+  @@index([competencia])
+  @@index([status])
 }
