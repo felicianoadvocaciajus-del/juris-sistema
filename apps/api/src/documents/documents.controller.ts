@@ -12,6 +12,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { DocumentsService } from './documents.service';
 import { DocumentScannerService } from './document-scanner.service';
+import { OcrService } from './ocr.service';
+import { NetworkScannerService } from './network-scanner.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -23,6 +25,8 @@ export class DocumentsController {
   constructor(
     private readonly documentsService: DocumentsService,
     private readonly scannerService: DocumentScannerService,
+    private readonly ocrService: OcrService,
+    private readonly networkScanner: NetworkScannerService,
   ) {}
 
   @Get()
@@ -147,6 +151,38 @@ export class DocumentsController {
   @ApiOperation({ summary: 'Remover documento' })
   async remove(@Param('id') id: string) {
     return this.documentsService.remove(id);
+  }
+
+  @Get('network/config')
+  @ApiOperation({ summary: 'Ver pastas de rede configuradas' })
+  async getNetworkPaths(): Promise<any> {
+    return this.networkScanner.getNetworkPaths();
+  }
+
+  @Post('network/config')
+  @ApiOperation({ summary: 'Configurar pastas de rede de outros PCs' })
+  async setNetworkPaths(
+    @Body() body: { paths: { name: string; path: string; ip: string; description?: string }[] },
+  ) {
+    return this.networkScanner.setNetworkPaths(body.paths);
+  }
+
+  @Post('network/scan')
+  @ApiOperation({ summary: 'Escanear todas as pastas de rede' })
+  async scanNetwork(@CurrentUser() user: JwtPayload) {
+    return this.networkScanner.scanAllNetworkPaths(user.sub);
+  }
+
+  @Post('ocr/:id')
+  @ApiOperation({ summary: 'Processar documento com OCR' })
+  async ocrDocument(@Param('id') id: string) {
+    return this.ocrService.processDocument(id);
+  }
+
+  @Post('ocr-batch')
+  @ApiOperation({ summary: 'Processar lote de documentos com OCR' })
+  async ocrBatch(@Query('limit') limit?: number) {
+    return this.ocrService.processAllDocuments(limit || 50);
   }
 
   @Post('generate')
